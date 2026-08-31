@@ -1,160 +1,190 @@
+const util = require('util');
+const fs = require('fs');
+const path = require('path');
 const Recipe = require('../models/recipeModel');
 const Ingredient = require('../models/ingredientModel');
 const RecipeIngredient = require('../models/recipeIngredientModel');
 const Step = require('../models/stepModel');
 const db = require('../config/db');
+const { validateRecipeInput, validateIngredientInput } = require('../middleware/validation');
+const { UPLOAD_DIR } = require('../middleware/upload');
 
+// Promisify db.query
+const query = util.promisify(db.query).bind(db);
 
-//CREATE FULL RECIPE (ingredients + steps)
-exports.addRecipeFull = (req, res) => {
-    const { title, servings, ingredients, steps } = req.body;
-
-    if (!title) {
-        return res.status(400).json({ message: 'Title is required' });
+// Multipart form fields arrive as JSON strings; plain JSON requests send real arrays
+const parseJSONField = (value, fallback) => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string' && value.trim().length > 0) {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return fallback;
+        }
     }
+    return fallback;
+};
 
-    // Step 1: Create recipe
-    Recipe.create({ title, servings }, (err, result) => {
-        if (err) return res.status(500).json(err);
+const deleteUploadedImage = (imageUrl) => {
+    if (!imageUrl || !imageUrl.startsWith('/uploads/')) return;
+    const filePath = path.join(UPLOAD_DIR, path.basename(imageUrl));
+    fs.unlink(filePath, () => {});
+};
 
-        const recipeId = result.insertId;
+// CREATE FULL RECIPE (ingredients + steps)
+exports.addRecipeFull = async (req, res, next) => {
+    try {
+        const { title, servings } = req.body;
+        const ingredients = parseJSONField(req.body.ingredients, []);
+        const steps = parseJSONField(req.body.steps, []);
 
-        let tasks = 0;
-        let completed = 0;
+        // Validate input
+        const errors = validateRecipeInput(title, ingredients, steps);
+        if (errors.length > 0) {
+            if (req.file) deleteUploadedImage(`/uploads/${req.file.filename}`);
+            return res.status(400).json({
+                message: 'Validation failed',
+                errors
+            });
+        }
 
-        const done = () => {
-            completed++;
-            if (completed === tasks) {
-                res.json({
-                    message: 'Recipe created successfully',
-                    recipeId
-                });
-            }
-        };
+        const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-        // 🔹 INGREDIENTS
+        // Step 1: Create recipe
+        const recipeResult = await query(
+            'INSERT INTO recipes (title, servings, image_url) VALUES (?, ?, ?)',
+            [title.trim(), servings || null, imageUrl]
+        );
+        const recipeId = recipeResult.insertId;
+
+        // Step 2: Add ingredients
         if (ingredients && ingredients.length > 0) {
-            tasks += ingredients.length;
+            for (const ing of ingredients) {
+                try {
+                    const existingIngredients = await query(
+                        'SELECT * FROM ingredients WHERE name = ?',
+                        [ing.name.trim()]
+                    );
 
-            ingredients.forEach((ing) => {
-                Ingredient.findByName(ing.name, (err, results) => {
-                    if (err) return;
-
-                    if (results.length > 0) {
-                        const ingredientId = results[0].id;
-
-                        RecipeIngredient.add({
-                            recipe_id: recipeId,
-                            ingredient_id: ingredientId,
-                            quantity: ing.quantity,
-                            unit: ing.unit
-                        }, done);
-
+                    let ingredientId;
+                    if (existingIngredients.length > 0) {
+                        ingredientId = existingIngredients[0].id;
                     } else {
-                        Ingredient.create(ing.name, (err, result) => {
-                            if (err) return;
-
-                            RecipeIngredient.add({
-                                recipe_id: recipeId,
-                                ingredient_id: result.insertId,
-                                quantity: ing.quantity,
-                                unit: ing.unit
-                            }, done);
-                        });
+                        const ingredientResult = await query(
+                            'INSERT INTO ingredients (name) VALUES (?)',
+                            [ing.name.trim()]
+                        );
+                        ingredientId = ingredientResult.insertId;
                     }
-                });
-            });
+
+                    await query(
+                        'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)',
+                        [recipeId, ingredientId, ing.quantity, ing.unit.trim()]
+                    );
+                } catch (err) {
+                    console.error(`Error processing ingredient ${ing.name}:`, err);
+                    throw err;
+                }
+            }
         }
 
-        // 🔹 STEPS
+        // Step 3: Add steps
         if (steps && steps.length > 0) {
-            tasks += steps.length;
-
-            steps.forEach((step, index) => {
-                Step.add({
-                    recipe_id: recipeId,
-                    step_number: index + 1,
-                    instruction: step
-                }, done);
-            });
+            for (let index = 0; index < steps.length; index++) {
+                try {
+                    await query(
+                        'INSERT INTO recipe_steps (recipe_id, step_number, instruction) VALUES (?, ?, ?)',
+                        [recipeId, index + 1, steps[index].trim()]
+                    );
+                } catch (err) {
+                    console.error(`Error processing step ${index + 1}:`, err);
+                    throw err;
+                }
+            }
         }
 
-        // If no ingredients & steps
-        if (tasks === 0) {
-            res.json({
-                message: 'Recipe created (no ingredients/steps)',
-                recipeId
-            });
-        }
-    });
+        return res.status(201).json({
+            message: 'Recipe created successfully',
+            recipeId
+        });
+    } catch (error) {
+        next(error);
+    }
 };
 
-
-//GET ALL RECIPES
-exports.getRecipes = (req, res) => {
-    Recipe.getAll((err, results) => {
-        if (err) return res.status(500).json(err);
+// GET ALL RECIPES
+exports.getRecipes = async (req, res, next) => {
+    try {
+        const results = await query('SELECT * FROM recipes');
         res.json(results);
-    });
+    } catch (error) {
+        next(error);
+    }
 };
 
+// GET RECIPE BY ID (FULL DETAILS)
+exports.getRecipeById = async (req, res, next) => {
+    try {
+        const recipeId = req.params.id;
 
-//GET RECIPE BY ID (FULL DETAILS)
-exports.getRecipeById = (req, res) => {
-    const recipeId = req.params.id;
+        // Validate ID
+        if (!recipeId || isNaN(recipeId)) {
+            return res.status(400).json({ message: 'Invalid recipe ID' });
+        }
 
-    const recipeSql = `SELECT * FROM recipes WHERE id = ?`;
-
-    db.query(recipeSql, [recipeId], (err, recipeResult) => {
-        if (err) return res.status(500).json(err);
-
-        if (recipeResult.length === 0) {
+        const recipes = await query('SELECT * FROM recipes WHERE id = ?', [recipeId]);
+        
+        if (recipes.length === 0) {
             return res.status(404).json({ message: 'Recipe not found' });
         }
 
-        const recipe = recipeResult[0];
+        const recipe = recipes[0];
 
-        const ingredientSql = `
-            SELECT i.name, ri.quantity, ri.unit
-            FROM recipe_ingredients ri
-            JOIN ingredients i ON ri.ingredient_id = i.id
-            WHERE ri.recipe_id = ?
-        `;
+        const ingredients = await query(
+            `SELECT i.name, ri.quantity, ri.unit
+             FROM recipe_ingredients ri
+             JOIN ingredients i ON ri.ingredient_id = i.id
+             WHERE ri.recipe_id = ?`,
+            [recipeId]
+        );
 
-        db.query(ingredientSql, [recipeId], (err, ingredients) => {
-            if (err) return res.status(500).json(err);
+        const steps = await query(
+            `SELECT * FROM recipe_steps
+             WHERE recipe_id = ?
+             ORDER BY step_number ASC`,
+            [recipeId]
+        );
 
-            Step.getByRecipeId(recipeId, (err, steps) => {
-                if (err) return res.status(500).json(err);
-
-                res.json({
-                    ...recipe,
-                    ingredients,
-                    steps
-                });
-            });
+        res.json({
+            ...recipe,
+            ingredients,
+            steps
         });
-    });
+    } catch (error) {
+        next(error);
+    }
 };
 
+// INGREDIENT MATCHING (SMART FEATURE)
+exports.matchRecipes = async (req, res, next) => {
+    try {
+        const userIngredients = req.body.ingredients;
 
-//INGREDIENT MATCHING (SMART FEATURE)
-exports.matchRecipes = (req, res) => {
-    const userIngredients = req.body.ingredients;
+        // Validate input
+        const errors = validateIngredientInput(userIngredients);
+        if (errors.length > 0) {
+            return res.status(400).json({ 
+                message: 'Validation failed',
+                errors 
+            });
+        }
 
-    if (!userIngredients || userIngredients.length === 0) {
-        return res.status(400).json({ message: 'No ingredients provided' });
-    }
-
-    const sql = `
-        SELECT r.id, r.title, i.name
-        FROM recipes r
-        JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-        JOIN ingredients i ON ri.ingredient_id = i.id
-    `;
-
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json(err);
+        const results = await query(`
+            SELECT r.id, r.title, i.name
+            FROM recipes r
+            JOIN recipe_ingredients ri ON r.id = ri.recipe_id
+            JOIN ingredients i ON ri.ingredient_id = i.id
+        `);
 
         const recipeMap = {};
 
@@ -175,129 +205,167 @@ exports.matchRecipes = (req, res) => {
             const required = recipe.ingredients;
 
             const matched = required.filter(ing =>
-                userIngredients.includes(ing)
+                userIngredients.some(userIng => 
+                    userIng.toLowerCase() === ing.toLowerCase()
+                )
             );
 
             matches.push({
                 recipeId: id,
                 title: recipe.title,
                 matchCount: matched.length,
-                totalIngredients: required.length
+                totalIngredients: required.length,
+                matchPercentage: Math.round((matched.length / required.length) * 100)
             });
         }
 
         matches.sort((a, b) => b.matchCount - a.matchCount);
 
         res.json(matches);
-    });
+    } catch (error) {
+        next(error);
+    }
 };
 
-exports.updateRecipe = (req, res) => {
-    const recipeId = req.params.id;
-    const { title, servings, ingredients, steps } = req.body;
+// UPDATE RECIPE
+exports.updateRecipe = async (req, res, next) => {
+    try {
+        const recipeId = req.params.id;
+        const { title, servings, removeImage } = req.body;
+        const ingredients = parseJSONField(req.body.ingredients, []);
+        const steps = parseJSONField(req.body.steps, []);
 
-    // 1. Update recipe basic info
-    const updateRecipeSql = `
-        UPDATE recipes
-        SET title = ?, servings = ?
-        WHERE id = ?
-    `;
+        // Validate ID
+        if (!recipeId || isNaN(recipeId)) {
+            return res.status(400).json({ message: 'Invalid recipe ID' });
+        }
 
-    db.query(updateRecipeSql, [title, servings, recipeId], (err) => {
-        if (err) return res.status(500).json(err);
-
-        // 2. Delete old ingredients
-        db.query(
-            'DELETE FROM recipe_ingredients WHERE recipe_id = ?',
-            [recipeId],
-            (err) => {
-                if (err) return res.status(500).json(err);
-
-                // 3. Delete old steps
-                db.query(
-                    'DELETE FROM recipe_steps WHERE recipe_id = ?',
-                    [recipeId],
-                    (err) => {
-                        if (err) return res.status(500).json(err);
-
-                        // 4. Re-add ingredients
-                        if (ingredients && ingredients.length > 0) {
-                            ingredients.forEach((ing) => {
-                                Ingredient.findByName(ing.name, (err, results) => {
-                                    if (err) return;
-
-                                    if (results.length > 0) {
-                                        saveRecipeIngredient(recipeId, results[0].id, ing);
-                                    } else {
-                                        Ingredient.create(ing.name, (err, result) => {
-                                            if (err) return;
-                                            saveRecipeIngredient(recipeId, result.insertId, ing);
-                                        });
-                                    }
-                                });
-                            });
-                        }
-
-                        // 5. Re-add steps
-                        if (steps && steps.length > 0) {
-                            steps.forEach((step, index) => {
-                                Step.add({
-                                    recipe_id: recipeId,
-                                    step_number: index + 1,
-                                    instruction: step
-                                }, () => {});
-                            });
-                        }
-
-                        // 6. Final response
-                        setTimeout(() => {
-                            res.json({
-                                message: 'Recipe updated successfully'
-                            });
-                        }, 500);
-                    }
-                );
-            }
-        );
-    });
-};
-
-function saveRecipeIngredient(recipeId, ingredientId, ing) {
-    const RecipeIngredient = require('../models/recipeIngredientModel');
-
-    RecipeIngredient.add({
-        recipe_id: recipeId,
-        ingredient_id: ingredientId,
-        quantity: ing.quantity,
-        unit: ing.unit
-    }, () => {});
-}
-
-exports.deleteRecipe = (req, res) => {
-    const recipeId = req.params.id;
-
-    // Step 1: delete steps
-    const deleteSteps = `DELETE FROM recipe_steps WHERE recipe_id = ?`;
-
-    db.query(deleteSteps, [recipeId], (err) => {
-        if (err) return res.status(500).json(err);
-
-        // Step 2: delete ingredients relation
-        const deleteIngredients = `DELETE FROM recipe_ingredients WHERE recipe_id = ?`;
-
-        db.query(deleteIngredients, [recipeId], (err) => {
-            if (err) return res.status(500).json(err);
-
-            // Step 3: delete recipe
-            const deleteRecipe = `DELETE FROM recipes WHERE id = ?`;
-
-            db.query(deleteRecipe, [recipeId], (err, result) => {
-                if (err) return res.status(500).json(err);
-
-                res.json({
-                    message: 'Recipe deleted successfully'
-                });
+        // Validate input
+        const errors = validateRecipeInput(title, ingredients, steps);
+        if (errors.length > 0) {
+            if (req.file) deleteUploadedImage(`/uploads/${req.file.filename}`);
+            return res.status(400).json({
+                message: 'Validation failed',
+                errors
             });
+        }
+
+        // Check if recipe exists
+        const existingRecipes = await query('SELECT id, image_url FROM recipes WHERE id = ?', [recipeId]);
+        if (existingRecipes.length === 0) {
+            if (req.file) deleteUploadedImage(`/uploads/${req.file.filename}`);
+            return res.status(404).json({ message: 'Recipe not found' });
+        }
+
+        const previousImageUrl = existingRecipes[0].image_url;
+        let imageUrl = previousImageUrl;
+        if (req.file) {
+            imageUrl = `/uploads/${req.file.filename}`;
+        } else if (removeImage === 'true' || removeImage === true) {
+            imageUrl = null;
+        }
+        if (imageUrl !== previousImageUrl) {
+            deleteUploadedImage(previousImageUrl);
+        }
+
+        // Update recipe basic info
+        await query(
+            'UPDATE recipes SET title = ?, servings = ?, image_url = ? WHERE id = ?',
+            [title.trim(), servings || null, imageUrl, recipeId]
+        );
+
+        // Delete old ingredients
+        await query('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [recipeId]);
+
+        // Delete old steps
+        await query('DELETE FROM recipe_steps WHERE recipe_id = ?', [recipeId]);
+
+        // Re-add ingredients
+        if (ingredients && ingredients.length > 0) {
+            for (const ing of ingredients) {
+                try {
+                    const existingIngredients = await query(
+                        'SELECT * FROM ingredients WHERE name = ?',
+                        [ing.name.trim()]
+                    );
+
+                    let ingredientId;
+                    if (existingIngredients.length > 0) {
+                        ingredientId = existingIngredients[0].id;
+                    } else {
+                        const ingredientResult = await query(
+                            'INSERT INTO ingredients (name) VALUES (?)',
+                            [ing.name.trim()]
+                        );
+                        ingredientId = ingredientResult.insertId;
+                    }
+
+                    await query(
+                        'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)',
+                        [recipeId, ingredientId, ing.quantity, ing.unit.trim()]
+                    );
+                } catch (err) {
+                    console.error(`Error processing ingredient ${ing.name}:`, err);
+                    throw err;
+                }
+            }
+        }
+
+        // Re-add steps
+        if (steps && steps.length > 0) {
+            for (let index = 0; index < steps.length; index++) {
+                try {
+                    await query(
+                        'INSERT INTO recipe_steps (recipe_id, step_number, instruction) VALUES (?, ?, ?)',
+                        [recipeId, index + 1, steps[index].trim()]
+                    );
+                } catch (err) {
+                    console.error(`Error processing step ${index + 1}:`, err);
+                    throw err;
+                }
+            }
+        }
+
+        res.json({
+            message: 'Recipe updated successfully',
+            recipeId
         });
-    });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// DELETE RECIPE
+exports.deleteRecipe = async (req, res, next) => {
+    try {
+        const recipeId = req.params.id;
+
+        // Validate ID
+        if (!recipeId || isNaN(recipeId)) {
+            return res.status(400).json({ message: 'Invalid recipe ID' });
+        }
+
+        // Check if recipe exists
+        const existingRecipes = await query('SELECT id, image_url FROM recipes WHERE id = ?', [recipeId]);
+        if (existingRecipes.length === 0) {
+            return res.status(404).json({ message: 'Recipe not found' });
+        }
+
+        // Delete steps
+        await query('DELETE FROM recipe_steps WHERE recipe_id = ?', [recipeId]);
+
+        // Delete ingredients relation
+        await query('DELETE FROM recipe_ingredients WHERE recipe_id = ?', [recipeId]);
+
+        // Delete recipe
+        await query('DELETE FROM recipes WHERE id = ?', [recipeId]);
+
+        deleteUploadedImage(existingRecipes[0].image_url);
+
+        res.json({
+            message: 'Recipe deleted successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
 };
