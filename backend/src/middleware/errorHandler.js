@@ -19,3 +19,5 @@ const errorHandler = (err, req, res, next) => {
 };
 
 module.exports = { asyncHandler, errorHandler };
+
+//this is used to handle errors in the backend. The asyncHandler function wraps asynchronous route handlers and catches any errors that occur, passing them to the next middleware (errorHandler). The errorHandler middleware logs the error and sends an appropriate response to the client based on the type of error encountered.

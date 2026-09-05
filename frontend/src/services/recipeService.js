@@ -6,7 +6,7 @@ export const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     if (/^https?:\/\//i.test(imagePath)) return imagePath;
     return `${API_ORIGIN}${imagePath}`;
-};
+}; //used to get the full URL of the image stored in the backend, if the imagePath is already a full URL, it returns it as is, otherwise it prepends the API_ORIGIN to the imagePath to form a complete URL.
 
 const buildRecipeFormData = ({ title, servings, ingredients, steps }, imageFile, removeImage) => {
     const formData = new FormData();

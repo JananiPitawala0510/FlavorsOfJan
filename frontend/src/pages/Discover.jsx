@@ -1,7 +1,8 @@
 import { useState } from "react";
 import Icon from "../components/Icon";
 import Button from "../components/Button";
-import { useToast } from "../context/useToast";
+import Loader from "../components/Loader";
+import { sendChatMessage } from "../services/aiService";
 
 const ideas = [
     "Something cozy for a rainy night, using what's already in my pantry",
@@ -10,13 +11,31 @@ const ideas = [
 ];
 
 export default function Discover() {
-    const { showToast } = useToast();
     const [prompt, setPrompt] = useState("");
+    const [messages, setMessages] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-    const handleNotify = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        showToast("Thanks for your interest! AI Discovery is still in the oven.");
+        const trimmed = prompt.trim();
+        if (!trimmed || loading) return;
+
+        setError(null);
+        const history = messages;
+        setMessages([...history, { role: "user", content: trimmed }]);
         setPrompt("");
+        setLoading(true);
+
+        try {
+            const reply = await sendChatMessage(trimmed, history);
+            setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+        } catch (err) {
+            setError(err.message || "FlavorMate couldn't respond right now.");
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -25,20 +44,19 @@ export default function Discover() {
                 <div className="mb-10 text-center">
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-gold-50 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-widest text-gold-dark">
                         <Icon name="sparkles" className="h-3.5 w-3.5" />
-                        Coming soon
+                        AI cooking companion
                     </span>
 
                     <h1 className="mt-5 font-display text-3xl font-semibold text-ink sm:text-4xl">
-                        AI-Assisted Recipe Discovery
+                        Ask FlavorMate
                     </h1>
                     <p className="mx-auto mt-3 max-w-xl text-base text-ink-soft">
-                        Describe a craving, a mood, or a fridge full of odds and ends — an AI
-                        cooking companion will help translate it into a recipe worth making.
+                        Got a craving, a mood, or a fridge full of random ingredients? Tell FlavorMate, and it’ll help you turn what you have into something worth cooking.
                     </p>
                 </div>
 
                 <form
-                    onSubmit={handleNotify}
+                    onSubmit={handleSubmit}
                     className="rounded-3xl border border-line bg-card p-6 shadow-soft sm:p-8"
                 >
                     <label className="mb-3 block text-sm font-semibold uppercase tracking-wide text-ink-soft">
@@ -63,7 +81,7 @@ export default function Discover() {
                             <button
                                 key={idea}
                                 type="button"
-                                onClick={() => setPrompt(idea)}
+                                onClick={() => setPrompt(idea)} // Set the prompt when an idea is clicked
                                 className="rounded-full border border-line bg-paper px-3 py-1.5 text-left text-xs font-medium text-ink-soft transition hover:border-gold hover:text-gold-dark"
                             >
                                 {idea}
@@ -71,31 +89,79 @@ export default function Discover() {
                         ))}
                     </div>
 
-                    <Button type="submit" className="mt-6 w-full" size="lg" icon="sparkles">
-                        Notify me when it's ready
+                    <Button
+                        type="submit"
+                        className="mt-6 w-full"
+                        size="lg"
+                        icon="sparkles"
+                        loading={loading}
+                        disabled={!prompt.trim()}
+                    >
+                        Ask FlavorMate
                     </Button>
                 </form>
+
+                {error && (
+                    <div className="mt-6 flex items-start gap-3 rounded-2xl border border-rust/30 bg-rust-50 p-4 text-rust-dark">
+                        <Icon name="alert" className="mt-0.5 h-5 w-5 flex-shrink-0" />
+                        <p className="text-sm font-medium">{error}</p>
+                    </div>
+                )}
+
+                {messages.length > 0 && (
+                    <div className="mt-8 space-y-4">
+                        {messages.map((msg, idx) =>
+                            msg.role === "user" ? (
+                                <div key={idx} className="flex justify-end">
+                                    <p className="max-w-[85%] rounded-2xl rounded-br-md bg-forest px-4 py-3 text-sm text-paper">
+                                        {msg.content}
+                                    </p> 
+                                </div> // Display user messages on the right side with a green background
+                            ) : (
+                                <div key={idx} className="flex justify-start">
+                                    <div className="flex max-w-[90%] gap-3 rounded-2xl rounded-bl-md border border-line bg-card px-4 py-3.5 shadow-soft">
+                                        <Icon
+                                            name="sparkles"
+                                            className="mt-0.5 h-4 w-4 flex-shrink-0 text-gold"
+                                        />
+                                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                                            {msg.content}
+                                        </p>
+                                    </div>
+                                </div>
+                            )
+                        )}
+
+                        {loading && (
+                            <div className="flex justify-start">
+                                <div className="rounded-2xl rounded-bl-md border border-line bg-card px-4 py-3">
+                                    <Loader label="FlavorMate is thinking…" />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <div className="mt-10 grid gap-4 sm:grid-cols-3">
                     {[
                         {
                             icon: "sparkles",
                             title: "Describe, don't search",
-                            body: "Skip the keyword guessing — just say what you're craving.",
+                            body: "Skip the keyword guessing, just say what you're craving.",
                         },
                         {
                             icon: "carrot",
                             title: "Built on your pantry",
-                            body: "Suggestions will lean on the ingredients you already track.",
+                            body: "Suggestions lean on the ingredients and recipes you already track.",
                         },
                         {
                             icon: "book",
                             title: "Saved to your book",
-                            body: "Anything you love can be saved straight into your journal.",
+                            body: "Anything you love can be added straight into your journal.",
                         },
                     ].map((item) => (
                         <div
-                            key={item.title}
+                            key={item.title} 
                             className="rounded-2xl border border-line bg-card p-5 text-center shadow-soft"
                         >
                             <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-forest-50 text-forest">

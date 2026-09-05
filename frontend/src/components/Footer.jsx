@@ -14,7 +14,7 @@ export default function Footer() {
                         </span>
                     </Link>
                     <p className="mt-3 max-w-xs text-sm leading-6 text-ink-soft">
-                        A personal cooking journal — every recipe kept, flipped through, and
+                        A personal cooking journal where every recipe kept, flipped through, and
                         cooked again.
                     </p>
                 </div>
@@ -27,7 +27,7 @@ export default function Footer() {
                         <li><Link to="/recipes" className="hover:text-forest">Recipe Book</Link></li>
                         <li><Link to="/match" className="hover:text-forest">Match by Ingredients</Link></li>
                         <li><Link to="/add" className="hover:text-forest">Add a Recipe</Link></li>
-                        <li><Link to="/discover" className="hover:text-forest">AI Discovery</Link></li>
+                        <li><Link to="/discover" className="hover:text-forest">FlavorMate</Link></li>
                     </ul>
                 </div>
 
@@ -37,7 +37,7 @@ export default function Footer() {
                     </h4>
                     <p className="mt-4 flex items-center gap-2 text-sm text-ink-soft">
                         <Icon name="leaf" className="h-4 w-4 text-forest" />
-                        Warmth, patience, and a well-worn cookbook.
+                        Warmth, patience, and a love.
                     </p>
                 </div>
             </div>

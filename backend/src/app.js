@@ -14,6 +14,9 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 const recipeRoutes = require('./routes/recipeRoutes');
 app.use('/api', recipeRoutes);
 
+const aiRoutes = require('./routes/aiRoutes');
+app.use('/api', aiRoutes);
+
 app.get('/', (req, res) => {
     res.send('FlavorsOfJan API is running 🚀');
 });

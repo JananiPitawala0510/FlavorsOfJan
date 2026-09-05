@@ -12,7 +12,7 @@ import { ToastProvider } from "./context/ToastProvider";
 function App() {
     return (
         <Router>
-            <ToastProvider>
+            <ToastProvider> 
                 <div className="flex min-h-screen flex-col bg-paper">
                     <Navbar />
 
@@ -35,3 +35,6 @@ function App() {
 }
 
 export default App;
+
+// This file defines the main App component for the React application. It sets up routing using React Router, includes a Navbar and Footer, and wraps the content in a ToastProvider for managing toast notifications. The Routes component defines different routes for various pages in the application, such as Dashboard, RecipeBook, Match, AddRecipe, EditRecipe, and Discover.
+// ToastProvider is a context provider that allows components within the application to access and manage toast notifications, providing a consistent way to display messages to users.

@@ -8,7 +8,7 @@ const links = [
     { name: "Recipe Book", path: "/recipes", icon: "book" },
     { name: "Match Recipes", path: "/match", icon: "carrot" },
     { name: "Add Recipe", path: "/add", icon: "plus" },
-    { name: "AI Discovery", path: "/discover", icon: "sparkles", badge: "Soon" },
+    { name: "FlavorMate", path: "/discover", icon: "sparkles" },
 ];
 
 export default function Navbar() {

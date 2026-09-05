@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import FlipBook from "../components/FlipBook";
 import Loader from "../components/Loader";
 import EmptyState from "../components/EmptyState";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { fetchRecipes, fetchRecipeById, deleteRecipe } from "../services/recipeService";
+import { downloadRecipePdf } from "../utils/generateRecipePdf";
 import { useToast } from "../context/useToast";
 
 export default function RecipeBook() {
@@ -13,110 +14,72 @@ export default function RecipeBook() {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const [recipes, setRecipes] = useState([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
+    const [startPage, setStartPage] = useState(0);
+    const [bookKey, setBookKey] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const [activeRecipe, setActiveRecipe] = useState(null);
-    const [pageLoading, setPageLoading] = useState(false);
-    const cache = useRef(new Map());
-
-    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [recipeToDelete, setRecipeToDelete] = useState(null);
     const [deleting, setDeleting] = useState(false);
 
-    useEffect(() => {
-        loadRecipes();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const loadRecipes = async () => {
+    const loadRecipes = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await fetchRecipes();
-            setRecipes(data);
             setError(null);
+            const list = await fetchRecipes();
+            const details = await Promise.all(list.map((r) => fetchRecipeById(r.id)));
 
             const openId = searchParams.get("open");
-            if (openId) {
-                const idx = data.findIndex((r) => String(r.id) === String(openId));
-                if (idx >= 0) setCurrentIndex(idx);
-                setSearchParams({}, { replace: true });
-            }
+            const openIndex = openId ? details.findIndex((r) => String(r.id) === String(openId)) : -1;
+            if (openId) setSearchParams({}, { replace: true });
+
+            setRecipes(details);
+            setStartPage(openIndex >= 0 ? openIndex * 2 : 0);
+            setBookKey((k) => k + 1);
         } catch (err) {
             setError("Could not reach the kitchen. Make sure the backend is running.");
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
-
-    const loadActiveRecipe = useCallback(async (id) => {
-        if (!id) return;
-        if (cache.current.has(id)) {
-            setActiveRecipe(cache.current.get(id));
-            return;
-        }
-        try {
-            setPageLoading(true);
-            const detail = await fetchRecipeById(id);
-            cache.current.set(id, detail);
-            setActiveRecipe(detail);
-        } catch (err) {
-            console.error(err);
-            setActiveRecipe(null);
-        } finally {
-            setPageLoading(false);
-        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
-        const current = recipes[currentIndex];
-        if (current) loadActiveRecipe(current.id);
-    }, [currentIndex, recipes, loadActiveRecipe]);
+        loadRecipes();
+    }, [loadRecipes]);
 
-    useEffect(() => {
-        if (currentIndex > recipes.length - 1) {
-            setCurrentIndex(Math.max(0, recipes.length - 1));
-        }
-    }, [recipes, currentIndex]);
-
-    const handlePrevPage = useCallback(() => {
-        setCurrentIndex((i) => Math.max(0, i - 1));
-    }, []);
-
-    const handleNextPage = useCallback(() => {
-        setCurrentIndex((i) => Math.min(recipes.length - 1, i + 1));
-    }, [recipes.length]);
-
-    useEffect(() => {
-        const onKey = (e) => {
-            if (e.key === "ArrowLeft") handlePrevPage();
-            if (e.key === "ArrowRight") handleNextPage();
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [handlePrevPage, handleNextPage]);
-
-    const handleEdit = () => {
-        const current = recipes[currentIndex];
-        if (current) navigate(`/edit/${current.id}`);
-    };
+    const handleEdit = (recipe) => navigate(`/edit/${recipe.id}`);
 
     const handleDeleteConfirmed = async () => {
-        const current = recipes[currentIndex];
-        if (!current) return;
+        if (!recipeToDelete) return;
         try {
             setDeleting(true);
-            await deleteRecipe(current.id);
-            cache.current.delete(current.id);
-            setRecipes((prev) => prev.filter((r) => r.id !== current.id));
-            showToast(`"${current.title}" was removed from your book.`);
-            setConfirmOpen(false);
+            await deleteRecipe(recipeToDelete.id);
+
+            const deletedIndex = recipes.findIndex((r) => r.id === recipeToDelete.id);
+            const remaining = recipes.filter((r) => r.id !== recipeToDelete.id);
+            const nextIndex = Math.max(0, Math.min(deletedIndex, remaining.length - 1));
+
+            setRecipes(remaining);
+            setStartPage(nextIndex * 2);
+            setBookKey((k) => k + 1);
+            showToast(`"${recipeToDelete.title}" was removed from your book.`);
+            setRecipeToDelete(null);
         } catch (err) {
             console.error(err);
             showToast("Couldn't delete that recipe. Please try again.", "error");
         } finally {
             setDeleting(false);
+        }
+    };
+
+    const handleDownloadPdf = async (recipe) => {
+        try {
+            await downloadRecipePdf(recipe);
+        } catch (err) {
+            console.error(err);
+            showToast("Couldn't generate the PDF. Please try again.", "error");
         }
     };
 
@@ -163,29 +126,27 @@ export default function RecipeBook() {
                     Your Recipe Book
                 </h1>
                 <p className="mt-2 text-sm text-ink-soft">
-                    Use the arrows — or your keyboard's ← and → — to turn the page.
+                    Drag a page corner, use the arrows, or your keyboard's ← and → to turn the page.
                 </p>
             </div>
 
             <FlipBook
-                recipe={activeRecipe}
-                loading={pageLoading}
-                currentIndex={currentIndex}
-                total={recipes.length}
-                onPrevPage={handlePrevPage}
-                onNextPage={handleNextPage}
+                key={bookKey}
+                recipes={recipes}
+                startPage={startPage}
                 onEdit={handleEdit}
-                onDelete={() => setConfirmOpen(true)}
+                onDelete={setRecipeToDelete}
+                onDownloadPdf={handleDownloadPdf}
             />
 
             <ConfirmDialog
-                open={confirmOpen}
+                open={!!recipeToDelete}
                 title="Delete this recipe?"
-                description={`"${recipes[currentIndex]?.title}" will be permanently removed from your cookbook. This can't be undone.`}
+                description={`"${recipeToDelete?.title}" will be permanently removed from your cookbook. This can't be undone.`}
                 confirmLabel="Delete recipe"
                 loading={deleting}
                 onConfirm={handleDeleteConfirmed}
-                onCancel={() => setConfirmOpen(false)}
+                onCancel={() => setRecipeToDelete(null)}
             />
         </div>
     );

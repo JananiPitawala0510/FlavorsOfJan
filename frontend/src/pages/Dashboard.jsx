@@ -7,7 +7,7 @@ const features = [
     {
         icon: "book",
         title: "Browse Recipes",
-        description: "Explore every recipe you've saved in a beautiful, flippable digital cookbook.",
+        description: "Explore every recipe saved in a beautiful, flippable digital cookbook.",
         to: "/recipes",
         cta: "Open the book",
         tone: "forest",
@@ -15,7 +15,7 @@ const features = [
     {
         icon: "carrot",
         title: "Match Recipes",
-        description: "Tell us what's in your kitchen and we'll surface the dishes you can make tonight.",
+        description: "Let's see what's in the kitchen and we'll surface the dishes we can make tonight.",
         to: "/match",
         cta: "Find a recipe",
         tone: "gold",
@@ -23,7 +23,7 @@ const features = [
     {
         icon: "pencil",
         title: "Add a Recipe",
-        description: "Capture a new creation — ingredients, steps, and the little details that matter.",
+        description: "Capture a new creation of ingredients, steps, and the little details that matter.",
         to: "/add",
         cta: "Start writing",
         tone: "rust",
@@ -64,7 +64,7 @@ export default function Dashboard() {
                         style={{ animationDelay: "80ms" }}
                     >
                         <Icon name="leaf" className="h-3.5 w-3.5" />
-                        A personal cooking journal
+                        My personal cooking journal
                     </p>
 
                     <h1
@@ -78,9 +78,7 @@ export default function Dashboard() {
                         className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-ink-soft animate-fade-up sm:text-xl"
                         style={{ animationDelay: "200ms" }}
                     >
-                        Every recipe worth remembering, kept in one warm digital cookbook —
-                        flip through your creations, or find something delicious using what's
-                        already in your kitchen.
+                        For the recipes that became favorites, the meals that became memories, and the moments in between.
                     </p>
 
                     <div
@@ -88,10 +86,10 @@ export default function Dashboard() {
                         style={{ animationDelay: "260ms" }}
                     >
                         <Button to="/recipes" size="lg" icon="book">
-                            Open Recipe Book
+                            My Recipe Book
                         </Button>
                         <Button to="/match" size="lg" variant="secondary" icon="carrot">
-                            Match Ingredients
+                            Let's Match Ingredients
                         </Button>
                     </div>
                 </div>
@@ -147,14 +145,13 @@ export default function Dashboard() {
 
                     <div className="flex-1">
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-gold-light">
-                            Coming soon
+                            New
                         </span>
                         <h3 className="mt-3 font-display text-2xl font-semibold text-paper sm:text-3xl">
-                            AI-Assisted Recipe Discovery
+                            Ask FlavorMate
                         </h3>
                         <p className="mt-2 text-sm leading-6 text-paper/75 sm:max-w-xl">
-                            Describe a craving, a mood, or a half-empty fridge — an AI companion
-                            will help surface the recipe you didn't know you wanted.
+                            Sometimes you know what you want. Sometimes you just know you’re hungry. FlavorMate helps you find the recipe in between.
                         </p>
                     </div>
 

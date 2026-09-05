@@ -14,7 +14,7 @@ export default function Match() {
     const [searched, setSearched] = useState(false);
     const [error, setError] = useState(null);
 
-    const addIngredient = (ing) => setIngredients((prev) => [...prev, ing]);
+    const addIngredient = (ing) => setIngredients((prev) => [...prev, ing]); // udsed to add ingredients to the list of ingredients in the state, by appending the new ingredient to the previous list of ingredients.
     const removeIngredient = (ing) =>
         setIngredients((prev) => prev.filter((i) => i !== ing));
 
@@ -98,10 +98,10 @@ export default function Match() {
                                 </h2>
                                 <div className="space-y-4">
                                     {matches.map((recipe) => (
-                                        <RecipeCard key={recipe.recipeId} recipe={recipe} />
-                                    ))}
-                                </div>
-                            </>
+                                        <RecipeCard key={recipe.recipeId} recipe={recipe} /> // maps the recipes to the RecipeCard component means that the RecipeCard component will be rendered for each recipe in the matches array when clicked, the recipe will be passed as a prop to the RecipeCard component
+                                    ))} 
+                                </div> 
+                            </> 
                         ) : (
                             <EmptyState
                                 icon="search"

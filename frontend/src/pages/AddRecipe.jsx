@@ -11,13 +11,14 @@ export default function AddRecipe() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const handleSubmit = async (payload, imageFile) => {
+    const handleSubmit = async (payload, imageFile) => { //payload means the form data
         setError(null);
         try {
             setLoading(true);
-            await createRecipe(payload, imageFile);
+            const created = await createRecipe(payload, imageFile);
+
             showToast(`"${payload.title}" was added to your cookbook.`);
-            navigate("/recipes");
+            navigate(`/recipes?open=${created.recipeId}`);
         } catch (err) {
             setError("Couldn't save this recipe. Please try again.");
             console.error(err);

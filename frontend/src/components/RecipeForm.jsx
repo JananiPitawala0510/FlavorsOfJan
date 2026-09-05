@@ -238,14 +238,17 @@ export default function RecipeForm({ initialData, submitLabel, loading, error, o
                                     placeholder="Qty"
                                     className="w-20 rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink outline-none focus:border-forest"
                                 />
-                                <input
-                                    type="text"
-                                    list="unit-suggestions"
-                                    value={ingredient.unit}
-                                    onChange={(e) => handleIngredientChange(index, "unit", e.target.value)}
-                                    placeholder="unit"
-                                    className="w-24 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-forest"
-                                />
+                                <select
+    value={ingredient.unit}
+    onChange={(e) => handleIngredientChange(index, "unit", e.target.value)}
+    className="w-24 rounded-xl border border-line bg-paper px-3 py-2.5 text-sm text-ink outline-none focus:border-forest"
+>
+    {UNITS.map((unit) => (
+        <option key={unit} value={unit}>
+            {unit}
+        </option>
+    ))}
+</select>
                                 {formData.ingredients.length > 1 && (
                                     <button
                                         type="button"

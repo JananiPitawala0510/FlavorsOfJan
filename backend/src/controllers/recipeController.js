@@ -55,7 +55,7 @@ exports.addRecipeFull = async (req, res, next) => {
             'INSERT INTO recipes (title, servings, image_url) VALUES (?, ?, ?)',
             [title.trim(), servings || null, imageUrl]
         );
-        const recipeId = recipeResult.insertId;
+        const recipeId = recipeResult.insertId; //creating a new recipe and getting its ID for further use
 
         // Step 2: Add ingredients
         if (ingredients && ingredients.length > 0) {
@@ -166,13 +166,13 @@ exports.getRecipeById = async (req, res, next) => {
 };
 
 // INGREDIENT MATCHING (SMART FEATURE)
-exports.matchRecipes = async (req, res, next) => {
+exports.matchRecipes = async (req, res, next) => { //req,res,next are the request, response, and next middleware function in Express.js. This function is used to match recipes based on the ingredients provided in the request body.
     try {
         const userIngredients = req.body.ingredients;
 
         // Validate input
         const errors = validateIngredientInput(userIngredients);
-        if (errors.length > 0) {
+        if (errors.length > 0) { //If there are validation errors, it returns a 400 Bad Request response with the validation errors in the response body. eg. if the user sends an empty array or invalid data types for ingredients, the server will respond with a 400 status code and a message indicating that validation failed, along with the specific errors.
             return res.status(400).json({ 
                 message: 'Validation failed',
                 errors 
@@ -196,7 +196,7 @@ exports.matchRecipes = async (req, res, next) => {
                 };
             }
             recipeMap[row.id].ingredients.push(row.name);
-        });
+        }); //This code iterates over the results of the SQL query and constructs a recipeMap object. Each recipe ID is used as a key in the recipeMap, and the corresponding value is an object containing the recipe title and an array of its ingredients. If a recipe ID is encountered for the first time, it initializes a new entry in the recipeMap with the title and an empty ingredients array. Then, it pushes the ingredient name into the ingredients array for that recipe ID.
 
         const matches = [];
 
@@ -219,7 +219,7 @@ exports.matchRecipes = async (req, res, next) => {
             });
         }
 
-        matches.sort((a, b) => b.matchCount - a.matchCount);
+        matches.sort((a, b) => b.matchCount - a.matchCount); //Sort the matches in descending order based on the number of matched ingredients, so that recipes with more matches appear first.
 
         res.json(matches);
     } catch (error) {
@@ -263,10 +263,10 @@ exports.updateRecipe = async (req, res, next) => {
             imageUrl = `/uploads/${req.file.filename}`;
         } else if (removeImage === 'true' || removeImage === true) {
             imageUrl = null;
-        }
+        } //If the user wants to remove the image, the imageUrl is set to null.
         if (imageUrl !== previousImageUrl) {
             deleteUploadedImage(previousImageUrl);
-        }
+        } //If the image URL has changed, the previous image is deleted.
 
         // Update recipe basic info
         await query(

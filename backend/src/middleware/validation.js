@@ -14,13 +14,13 @@ const validateRecipeInput = (title, ingredients, steps) => {
         ingredients.forEach((ing, index) => {
             if (!ing.name || typeof ing.name !== 'string') {
                 errors.push(`Ingredient ${index + 1}: name is required`);
-            }
+            } // Check if quantity is a number
             if (!ing.quantity || typeof ing.quantity !== 'number') {
                 errors.push(`Ingredient ${index + 1}: quantity must be a number`);
-            }
+            } // Check if unit is a string
             if (!ing.unit || typeof ing.unit !== 'string') {
                 errors.push(`Ingredient ${index + 1}: unit is required`);
-            }
+            } // Check if unit is a string
         });
     }
 
